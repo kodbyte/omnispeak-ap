@@ -8,6 +8,7 @@
 #include "id_vh.h"
 #include "id_in.h"
 #include "ck_def.h"
+#include "ck_play.h"
 
 int ap_current_level = -1;
 int ap_current_episode = -1;
@@ -16,6 +17,10 @@ int ap_points_gained = 0;
 bool ap_has_pogo = 0;
 bool ap_has_stunner = 0;
 bool ap_force_abort = 0;
+
+bool ap_death_link_enabled = false;
+bool ap_pending_death = false;
+bool ap_suppress_death_send = false;
 
 void ap_on_level_complete(void)
 {
@@ -43,6 +48,91 @@ void ap_on_security_card_get(void)
 void ap_on_score_increase(int score)
 {
 	ap_points_gained = score - ap_starting_points;
+}
+
+static const char *ap_death_msgs_generic[] = {
+	"Commander Keen was hit",
+	"Commander Keen forgot to dodge",
+	"Commander Keen got Slugged",
+	"Commander Keen's helmet wasn't on tight enough",
+	"Commander Keen took a Wormouth to the face",
+	"Commander Keen ran out of lifewater",
+	"Commander Keen's mom is going to be mad",
+	"Billy Blaze got grounded for a week",
+	"Commander Keen learned not to touch the spiky things",
+	"Commander Keen's eight-year-old genius failed him",
+	"Commander Keen got a little too curious",
+	"Commander Keen needed more pickles",
+};
+
+static const char *ap_death_msgs_eaten[] = {
+	"Commander Keen got Dopefish'd",
+	"Commander Keen was today's special",
+	"Commander Keen learned why Dopefish is so happy",
+	"Commander Keen swam too close to the buffet",
+	"Commander Keen forgot fish gotta eat too",
+};
+
+static const char *ap_death_msgs_fell[] = {
+	"Commander Keen took the express elevator down",
+	"Commander Keen discovered gravity, the hard way",
+	"Commander Keen failed his orbital re-entry",
+	"Commander Keen jumped one time too many",
+	"Commander Keen forgot to pack a parachute",
+};
+
+const char* ap_random_death_message(int kind)
+{
+	const char **arr;
+	int n;
+	switch (kind)
+	{
+		case AP_DEATH_EATEN:
+			arr = ap_death_msgs_eaten;
+			n = (int)(sizeof(ap_death_msgs_eaten) / sizeof(ap_death_msgs_eaten[0]));
+			break;
+		case AP_DEATH_FELL:
+			arr = ap_death_msgs_fell;
+			n = (int)(sizeof(ap_death_msgs_fell) / sizeof(ap_death_msgs_fell[0]));
+			break;
+		default:
+			arr = ap_death_msgs_generic;
+			n = (int)(sizeof(ap_death_msgs_generic) / sizeof(ap_death_msgs_generic[0]));
+			break;
+	}
+	return arr[US_RndT() % n];
+}
+
+void ap_on_death(const char* cause)
+{
+	if (!ap_death_link_enabled)
+		return;
+	if (ap_suppress_death_send)
+	{
+		// This kill was triggered by an incoming DeathLink — don't echo it back.
+		ap_suppress_death_send = false;
+		return;
+	}
+	ap_send_death(cause ? cause : "Commander Keen died");
+}
+
+void ap_apply_pending_death(void)
+{
+	if (!ap_pending_death)
+		return;
+	// Drop pending if we can't apply it right now. Holding it across the
+	// death animation would cause a second death immediately after respawn.
+	if (ck_gameState.levelState != LS_Playing
+	    || ck_invincibilityTimer != 0
+	    || ck_godMode)
+	{
+		ap_pending_death = false;
+		return;
+	}
+
+	ap_pending_death = false;
+	ap_suppress_death_send = true;
+	CK_KillKeen();
 }
 
 bool ap_has_level(int level, int ep)

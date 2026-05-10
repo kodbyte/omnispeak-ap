@@ -25,6 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "ck_phys.h"
 #include "ck_play.h"
 #include "ck4_ep.h"
+#include "ap_hooks.h"
 
 #include <stdio.h>
 
@@ -345,6 +346,9 @@ void CK4_SpawnDopefish(int tileX, int tileY)
 
 void CK4_KillKeenUnderwater(CK_object *obj)
 {
+	// Bypasses CK_KillKeen (no death animation underwater), so fire the
+	// DeathLink hook here too.
+	ap_on_death(ap_random_death_message(AP_DEATH_EATEN));
 	ck_gameState.levelState = LS_Died;
 }
 

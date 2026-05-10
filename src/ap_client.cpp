@@ -119,6 +119,29 @@ void ap_client_init(void)
         else if (val.is_string())
             episode = std::stoi(val.get<std::string>());
     }
+
+    if (slot_data.contains("death_link"))
+    {
+        auto& val = slot_data["death_link"];
+        if (val.is_number())
+            ap_death_link_enabled = val.get<int>() != 0;
+        else if (val.is_boolean())
+            ap_death_link_enabled = val.get<bool>();
+        else if (val.is_string())
+            ap_death_link_enabled = std::stoi(val.get<std::string>()) != 0;
+    }
+
+    if (ap_death_link_enabled)
+    {
+        ap->ConnectUpdate(false, 0, true, {"AP", "NoText", "DeathLink"});
+        FILE *f = fopen("ap_log.txt", "a");
+        if (f)
+        {
+            fprintf(f, "[AP] DeathLink subscribed\n");
+            fclose(f);
+        }
+    }
+
 	ap_show_message("Slot Connected.");
 });
 
@@ -128,6 +151,76 @@ void ap_client_init(void)
 			ap_client_give_item(item.item);
 	});
 
+	ap->set_bounced_handler([](const nlohmann::json& cmd) {
+		if (!ap_death_link_enabled)
+			return;
+		if (!cmd.contains("tags"))
+			return;
+		bool is_deathlink = false;
+		for (auto& tag : cmd["tags"])
+		{
+			if (tag.is_string() && tag.get<std::string>() == "DeathLink")
+			{
+				is_deathlink = true;
+				break;
+			}
+		}
+		if (!is_deathlink)
+			return;
+
+		if (cmd.contains("data") && cmd["data"].contains("source"))
+		{
+			auto& src = cmd["data"]["source"];
+			if (src.is_string() && src.get<std::string>() == ap_slotname)
+				return; // ignore our own bounce
+		}
+
+		ap_pending_death = true;
+
+		FILE *f = fopen("ap_log.txt", "a");
+		if (f)
+		{
+			std::string source = "?";
+			std::string cause = "?";
+			if (cmd.contains("data"))
+			{
+				if (cmd["data"].contains("source") && cmd["data"]["source"].is_string())
+					source = cmd["data"]["source"].get<std::string>();
+				if (cmd["data"].contains("cause") && cmd["data"]["cause"].is_string())
+					cause = cmd["data"]["cause"].get<std::string>();
+			}
+			fprintf(f, "[AP] DeathLink received from %s: %s\n", source.c_str(), cause.c_str());
+			fclose(f);
+		}
+	});
+
+}
+
+void ap_send_death(const char* cause)
+{
+	if (!ap || ap->get_state() != APClient::State::SLOT_CONNECTED)
+		return;
+	if (!ap_death_link_enabled)
+		return;
+
+	nlohmann::json data = {
+		{"time",   ap->get_server_time()},
+		{"source", ap_slotname},
+		{"cause",  cause ? cause : "Commander Keen died"},
+	};
+	ap->Bounce(data, {}, {}, {"DeathLink"});
+	// Flush immediately: most death paths set LS_Died on the same frame they
+	// fire ap_on_death, which exits the gameplay loop where ap_client_poll
+	// runs. Without this, the Bounce sits queued in the websocket until the
+	// player dismisses the death/try-again modal.
+	ap->poll();
+
+	FILE *f = fopen("ap_log.txt", "a");
+	if (f)
+	{
+		fprintf(f, "[AP] DeathLink sent: %s\n", cause ? cause : "Commander Keen died");
+		fclose(f);
+	}
 }
 
 void ap_client_poll(void)

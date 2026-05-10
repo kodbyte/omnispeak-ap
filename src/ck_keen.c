@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "ck_def.h"
 #include "ck_phys.h"
 #include "ck_play.h"
+#include "ap_hooks.h"
 
 // TODO: Handle multiple episodes in some way
 #ifdef WITH_KEEN4
@@ -1748,6 +1749,8 @@ void CK_KillKeen()
 
 	obj->velY = -40;
 	obj->velX = 16;
+
+	ap_on_death(ap_random_death_message(AP_DEATH_GENERIC));
 }
 
 void CK_KeenPoleHandleInput(CK_object *obj)

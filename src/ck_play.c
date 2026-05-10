@@ -2338,6 +2338,7 @@ void CK_PlayLoop()
 
 		//AP Client Poll
 		ap_client_poll();
+		ap_apply_pending_death();
 
 		IN_PumpEvents();
 		CK_HandleInput();
@@ -2464,6 +2465,11 @@ void CK_PlayLoop()
 					if (currentObj->type == CT_Player)
 					{
 						// Kill Keen if he exits the bottom of the map.
+						// Bypasses CK_KillKeen, so fire the DeathLink hook here
+						// instead (ap_force_abort at line ~1285 also sets
+						// LS_Died but must NOT bounce, hence not hooking on
+						// LS_Died globally).
+						ap_on_death(ap_random_death_message(AP_DEATH_FELL));
 						ck_gameState.levelState = LS_Died;
 						continue;
 					}
