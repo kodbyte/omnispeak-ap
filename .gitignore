@@ -3,3 +3,5 @@ SDL-1.*
 ._SDL-1.*
 bin*
 obj*
+build*
+third_party_pinned/

@@ -104,19 +104,39 @@ DEFAULT_RENDERER = sdl2gl
 DEFAULT_BUILDASCPP = 0
 DEFAULT_LOCAL_SDL = 0
 BINDIR =
-LIBGL = -lopengl32
+LIBGL = -lGL
 LIBVULKAN = -lvulkan
 LIBASOUND = -lasound
 LIBIEEE1284 = -lieee1284
 LIBOPLHW = -loplhw
-LIBS += -lssl -lcrypto -lcrypt32 -lz -lws2_32 -lopengl32 -lm
+LIBS += -lssl -lcrypto -lz -lm
 SDL_CONFIG_PREFIX =
 OUTDIR_SUFFIX := INVALID
+
+# Archipelago client + websocket deps are header-only and vendored under
+# src/third_party. Include order matters: pinned asio must come before any
+# system include path that might also expose asio (e.g. brew's), and the
+# brew prefix must come before -Ithird_party so brew's complete nlohmann
+# tree wins over the incomplete vendored copy.
+CXXFLAGS += -I../third_party_pinned/asio-f693a3eb7fe72a5f19b975289afc4f437d373d9c/asio/include
+
+UNAME_S := $(shell uname -s)
 
 ifeq ($(PLATFORM),)
 	OUTDIR_SUFFIX :=
 	DEFAULT_BUILDASCPP = 1
+	ifeq ($(UNAME_S),Darwin)
+		BREW_PREFIX := $(shell brew --prefix 2>/dev/null)
+		ifneq ($(BREW_PREFIX),)
+			CXXFLAGS += -I$(BREW_PREFIX)/include -I$(BREW_PREFIX)/opt/openssl@3/include
+			LDFLAGS  += -L$(BREW_PREFIX)/opt/openssl@3/lib
+		endif
+		LIBGL = -framework OpenGL
+	endif
 endif
+
+CXXFLAGS += -Ithird_party -Ithird_party/apclientpp -Ithird_party/wswrap/include -Ithird_party/valijson/include
+CXXFLAGS += -DASIO_STANDALONE -D_WEBSOCKETPP_CPP11_STL_ -DAP_NO_SCHEMA
 
 ifneq (,$(findstring win,$(PLATFORM)))
 	# common Windows stuff
@@ -129,6 +149,7 @@ ifneq (,$(findstring win,$(PLATFORM)))
 	DEFAULT_LOCAL_SDL = 1
 	DEFAULT_RENDERER = sdl2
 	LIBGL = -lopengl32
+	LIBS += -lcrypt32 -lws2_32
 endif
 ifeq ($(PLATFORM), win32)
 	OUTDIR_SUFFIX := -win32
